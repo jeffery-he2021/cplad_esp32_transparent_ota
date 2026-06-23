@@ -1,0 +1,304 @@
+/* UART asynchronous example, that uses separate RX and TX tasks
+
+   This example code is in the Public Domain (or CC0 licensed, at your option.)
+
+   Unless required by applicable law or agreed to in writing, this
+   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+   CONDITIONS OF ANY KIND, either express or implied.
+*/
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_system.h"
+#include "esp_log.h"
+#include "driver/uart.h"
+#include "string.h"
+#include "driver/gpio.h"
+#include "uart_ble_tasks.h"
+
+#include "host/ble_hs.h"
+// #include "nimble/nimble_port.h"
+// #include "nimble/nimble_port_freertos.h"
+// #include "host/util/util.h"
+SemaphoreHandle_t sem_transparent_notify;
+bool notify_state_transparent = false;
+// extern SemaphoreHandle_t sem_transparent_notify;
+// extern SemaphoreHandle_t sem_notify_uart;
+extern uint8_t transparent_payload[20];
+extern uint16_t ble_conn_handle;
+extern uint16_t transparent_notify_handle;
+
+static const int RX_BUF_SIZE = 256;//1024;
+
+//create queue
+QueueHandle_t q_uart2ble;
+QueueHandle_t q_ble2uart;
+QueueHandle_t q_uart2uart;
+int32_t bleWrTimeStart = 0;
+int32_t bleWrTimeEnd = 0;
+
+
+#define TXD_PIN (GPIO_NUM_4)//(GPIO_NUM_20)//
+#define RXD_PIN (GPIO_NUM_5)//(GPIO_NUM_19)//
+
+void uart_init(void)
+{
+    const uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    // We won't use a buffer for sending data.
+    uart_driver_install(UART_NUM_1, RX_BUF_SIZE * 2, 0, 0, NULL, 0);
+    uart_param_config(UART_NUM_1, &uart_config);
+    uart_set_pin(UART_NUM_1, TXD_PIN, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    //create queue
+    q_uart2ble = xQueueCreate(QUEUE_LENGTH, sizeof(queue_item_t));
+    q_ble2uart = xQueueCreate(QUEUE_LENGTH, sizeof(queue_item_t));
+    q_uart2uart = xQueueCreate(QUEUE_LENGTH, sizeof(queue_item_t));
+    assert(q_uart2ble != NULL);
+    assert(q_ble2uart != NULL); 
+}
+
+int sendData(const char* logName, const char* data, const int len)
+{
+    // const int len = strlen(data);
+    const int txBytes = uart_write_bytes(UART_NUM_1, data, len);
+    ESP_LOGI(logName, "Wrote %d bytes", txBytes);
+    return txBytes;
+}
+int recvData(const char* logName, char* data, const int len)
+{
+    const int rxBytes = uart_read_bytes(UART_NUM_1, data, len, 10 / portTICK_PERIOD_MS);
+    if (rxBytes > 0) {
+        data[rxBytes] = 0;
+        ESP_LOGI(logName, "Read %d bytes: '%s'", rxBytes, data);
+        ESP_LOG_BUFFER_HEXDUMP(logName, data, rxBytes, ESP_LOG_INFO);
+    }
+    return rxBytes;
+}
+int32_t start_time;
+int32_t end_time;
+/* UART读任务：收到数据 -> 放入队列 q_uart2ble */
+static void uart_rx_task(void *arg)
+{
+    queue_item_t rx_item;
+    while(1) {  
+        // rx_item.len = uart_read_bytes(UART_NUM_1, rx_item.data, ITEM_BUF_SIZE, 500 / portTICK_PERIOD_MS);
+        rx_item.len = recvData("Jeffery_UART_RX", (char*)rx_item.data, ITEM_BUF_SIZE);   
+        if (rx_item.len > 0 ){
+            ESP_LOGI("Jeffery_UrecvData", "Received %d bytes", rx_item.len);
+            end_time = esp_log_timestamp();    
+            ESP_LOGI("Jeffery_UrecvData", " %ld us", (int32_t)(end_time - start_time)); 
+            
+            // ESP_LOGI("Jeffery_UART_RX", "Read %d bytes", rxBytes);
+            // ESP_LOG_BUFFER_HEXDUMP("Jeffery_UART_RX", data, rxBytes, ESP_LOG_INFO);
+            //放入队列
+            // if(xQueueSend(q_uart2uart, &rx_item, portMAX_DELAY) != pdTRUE) {
+            //     ESP_LOGE("Jeffery_UART_RX", "xQueueSend fail");
+            // }
+            if(xQueueSend(q_uart2ble, &rx_item, portMAX_DELAY) != pdTRUE) {
+                ESP_LOGE("Jeffery_UART_RX", "xQueueSend fail");
+            }
+            end_time = esp_log_timestamp(); 
+            ESP_LOGI("Jeffery_UartRx_xQueueSend", " %ld us", (end_time - start_time));
+        }
+        // vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+
+    // static const char *RX_TASK_TAG = "RX_TASK";
+    // esp_log_level_set(RX_TASK_TAG, ESP_LOG_INFO);
+    // uint8_t* data = (uint8_t*) malloc(RX_BUF_SIZE + 1);
+    // int rc;
+    // struct os_mbuf *om;
+    // while (1) {
+    //     // const int rxBytes = uart_read_bytes(UART_NUM_1, data, RX_BUF_SIZE, 1000 / portTICK_PERIOD_MS);
+    //     const int rxBytes = uart_read_bytes(UART_NUM_1, data, RX_BUF_SIZE, 500 / portTICK_PERIOD_MS);
+    //     if (rxBytes > 0) {
+    //         data[rxBytes] = 0;
+    //         ESP_LOGI(RX_TASK_TAG, "Read %d bytes: '%s'", rxBytes, data);
+    //         ESP_LOG_BUFFER_HEXDUMP(RX_TASK_TAG, data, rxBytes, ESP_LOG_INFO);
+    //         om = ble_hs_mbuf_from_flat(transparent_payload, sizeof(transparent_payload));
+    //         rc = ble_gatts_notify_custom(conn_handle, transparent_notify_handle, om);
+    //     }
+    //     ESP_LOGI("Jeffery", "Delay %d ms RX Data Size %d", 1000, rxBytes);
+    //     // vTaskDelay(10 / portTICK_PERIOD_MS);
+    // }
+    // free(data);
+}
+//发送数据到UART
+static void uart_tx_task(void *arg)
+{
+    queue_item_t tx_item;
+    uint8_t testData[11] = "0000000000";
+    while(1) {
+        //等待队列中有数据
+            // //发送数据   
+            testData[10] += 1;    
+        start_time = esp_log_timestamp(); 
+        // sendData("Jeffery_TX_UART", "(const char*)tx_item.data", tx_item.len);
+        sendData("Jeffery_TX_UART", (const char*)testData, 11);
+        end_time = esp_log_timestamp(); 
+        ESP_LOGI("Jeffery_sendData", " %ld us", (int32_t)(end_time - start_time));
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
+    }
+    // queue_item_t tx_item;
+    // while(1) {
+    //     //等待队列中有数据
+    //     if(xQueueReceive(q_uart2uart, &tx_item, portMAX_DELAY) == pdTRUE) {
+    //         // //发送数据
+    //         ESP_LOGI("Jeffery_TX_UART", "Receive %d bytes", tx_item.len);
+    //         sendData("Jeffery_TX_UART", (const char*)tx_item.data, tx_item.len);
+    //         end_time = esp_log_timestamp(); 
+    //         ESP_LOGI("Jeffery_UartTxTime 2", " %ld us", (end_time - start_time));
+    //     }
+    //     // vTaskDelay(10 / portTICK_PERIOD_MS);
+    // }
+}
+//uart_to_ble_task: 从队列取数据 -> 发送BLE通知
+static void uart_to_ble_task(void *arg)
+{
+    // //测试notify speed
+    // queue_item_t uart2ble_item;
+    // uart2ble_item.data[0] = 1;
+    // uart2ble_item.data[9] = 10;
+    // uart2ble_item.len = 10;
+    // int rc;
+    // struct os_mbuf *om;
+    // while(1) {
+    //     if(uart2ble_item.len > 0) {
+    //         if(notify_state_transparent == false) {
+    //             ESP_LOGI("Jeffery", "Notify is not enabled");
+    //             vTaskDelay(1000 / portTICK_PERIOD_MS);
+    //             continue;
+    //         }
+    //         //检查连接句柄
+    //         if(ble_conn_handle == BLE_HS_CONN_HANDLE_NONE) {
+    //             ESP_LOGE("Jeffery", "No Connection");
+    //             vTaskDelay(1000 / portTICK_PERIOD_MS);
+    //             continue;
+    //         }
+    //         //发送数据
+    //         om = ble_hs_mbuf_from_flat(uart2ble_item.data, uart2ble_item.len);
+    //         rc = ble_gatts_notify_custom(ble_conn_handle, transparent_notify_handle, om);
+    //         if (rc != 0) {
+    //             ESP_LOGE("Jeffery_Error", "Error while sending notification; rc = %d", rc);
+    //             /* Most probably error is because we ran out of mbufs (rc = 6),
+    //                 * increase the mbuf count/size from menuconfig. Though
+    //                 * inserting delay is not good solution let us keep it
+    //                 * simple for time being so that the mbufs get freed up
+    //                 * (?), of course assumption is we ran out of mbufs */
+    //             vTaskDelay(1000 / portTICK_PERIOD_MS);
+    //         }
+    //     }
+    //     vTaskDelay(2000 / portTICK_PERIOD_MS);
+    // }
+
+    queue_item_t uart2ble_item;
+    int rc;
+    struct os_mbuf *om;
+    while(1) {
+        uart2ble_item.len = recvData("Jeffery_uart_to_ble_task", (char*)uart2ble_item.data, ITEM_BUF_SIZE);
+        if(uart2ble_item.len > 0) {
+            bleWrTimeEnd = esp_log_timestamp();
+            ESP_LOGI("Jeffery_uart_to_ble_task", "Received Data FROM UART Time %ld us", (int32_t)(bleWrTimeEnd - bleWrTimeStart)); 
+            end_time = esp_log_timestamp();    
+            ESP_LOGI("Jeffery_uart_to_ble_task", "Received Data Time %ld us", (int32_t)(end_time - start_time)); 
+            if(notify_state_transparent == false) {
+                ESP_LOGI("Jeffery", "Notify is not enabled");
+                continue;
+            }
+            //检查连接句柄
+            if(ble_conn_handle == BLE_HS_CONN_HANDLE_NONE) {
+                ESP_LOGE("Jeffery", "No Connection");
+                continue;
+            }
+            //发送数据
+            ESP_LOGI("Jeffery_UART_to_BLE", "Send %d bytes", uart2ble_item.len);
+            om = ble_hs_mbuf_from_flat(uart2ble_item.data, uart2ble_item.len);
+            rc = ble_gatts_notify_custom(ble_conn_handle, transparent_notify_handle, om);
+            if (rc != 0) {
+                ESP_LOGE("Jeffery_Error", "Error while sending notification; rc = %d", rc);
+                /* Most probably error is because we ran out of mbufs (rc = 6),
+                    * increase the mbuf count/size from menuconfig. Though
+                    * inserting delay is not good solution let us keep it
+                    * simple for time being so that the mbufs get freed up
+                    * (?), of course assumption is we ran out of mbufs */
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
+            }
+            bleWrTimeEnd = esp_log_timestamp();
+            ESP_LOGI("Jeffery_uart_to_ble_task", "SEND Data to BLE NOTIFY Time %ld us", (int32_t)(bleWrTimeEnd - bleWrTimeStart));
+            ESP_LOGI("Jeffery_uart_to_ble_task", "bleWrTimeEnd Time %ld us", (int32_t)(bleWrTimeEnd));
+        }
+        // vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+
+
+    // queue_item_t uart2ble_item;
+    // int rc;
+    // struct os_mbuf *om;
+    // while(1) {
+    //     //等待队列中有数据
+    //     if(xQueueReceive(q_uart2ble, &uart2ble_item, portMAX_DELAY) == pdTRUE) {
+    //         if(notify_state_transparent == false) {
+    //             ESP_LOGI("Jeffery", "Notify is not enabled");
+    //             //如果没有使能通知，则清空队列数据
+    //             xQueueReset(q_uart2ble);//清空队列
+    //             continue;
+    //         }
+    //         // //等待通知信号量释放
+    //         // if(xSemaphoreTake(sem_transparent_notify, 1000 / portTICK_PERIOD_MS) != pdTRUE) {
+    //         //     ESP_LOGE("Jeffery", "xSemaphoreTake fail");
+    //         //     xQueueReset(q_uart2ble);//清空队列
+    //         //     continue;
+    //         // }
+    //         //检查连接句柄
+    //         if(ble_conn_handle == BLE_HS_CONN_HANDLE_NONE) {
+    //             ESP_LOGE("Jeffery", "No Connection");
+    //             xQueueReset(q_uart2ble);//清空队列
+    //             continue;
+    //         }
+    //         //发送数据
+    //         ESP_LOGI("Jeffery_UART_to_BLE", "Send %d bytes", uart2ble_item.len);
+    //         om = ble_hs_mbuf_from_flat(uart2ble_item.data, uart2ble_item.len);
+    //         rc = ble_gatts_notify_custom(ble_conn_handle, transparent_notify_handle, om);
+    //         if (rc != 0) {
+    //             ESP_LOGE("Jeffery_Error", "Error while sending notification; rc = %d", rc);
+    //             /* Most probably error is because we ran out of mbufs (rc = 6),
+    //                 * increase the mbuf count/size from menuconfig. Though
+    //                 * inserting delay is not good solution let us keep it
+    //                 * simple for time being so that the mbufs get freed up
+    //                 * (?), of course assumption is we ran out of mbufs */
+    //             vTaskDelay(1000 / portTICK_PERIOD_MS);
+    //         }
+    //     }
+    //     // vTaskDelay(10 / portTICK_PERIOD_MS);
+    // }
+}
+//发送数据到UART
+static void ble_to_uart_task(void *arg)
+{
+    queue_item_t ble2uart_item;
+    while(1) {
+        //等待队列中有数据
+        if(xQueueReceive(q_ble2uart, &ble2uart_item, portMAX_DELAY) == pdTRUE) {
+            bleWrTimeEnd = esp_log_timestamp();
+            ESP_LOGI("Jeffery_BLE_to_UART", "Received Data FROM BLE Time %ld us", (int32_t)(bleWrTimeEnd - bleWrTimeStart)); 
+            // //发送数据
+            start_time = esp_log_timestamp(); 
+            ESP_LOGI("Jeffery_BLE_to_UART", "Receive %d bytes", ble2uart_item.len);
+            sendData("Jeffery_BLE_to_UART", (const char*)ble2uart_item.data, ble2uart_item.len);
+        }
+        // vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+}
+void uart_task_init(void)
+{
+    uart_init();
+    // xTaskCreate(uart_rx_task, "uart_rx_task", 1024 * 2, NULL, configMAX_PRIORITIES - 1, NULL);
+    xTaskCreate(uart_to_ble_task, "uart_to_ble_task", 1024 * 2, NULL, configMAX_PRIORITIES - 1, NULL);
+    xTaskCreate(ble_to_uart_task, "uart_tx_task", 1024 * 2, NULL, configMAX_PRIORITIES - 1, NULL);
+    // xTaskCreate(uart_tx_task, "uart_tx_task", 1024 * 2, NULL, configMAX_PRIORITIES - 1, NULL);
+}

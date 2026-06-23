@@ -1,0 +1,2 @@
+source C:/1_jeff/esp_proj/ble_transparent/build/bootloader/gdbinit/symbols
+source C:/1_jeff/esp_proj/ble_transparent/build/bootloader/gdbinit/connect

@@ -1,0 +1,38 @@
+{
+  "C_Cpp.intelliSenseEngine": "default",
+  "idf.espIdfPathWin": "C:/Espressif/frameworks/esp-idf-v5.4.1/",
+  "idf.toolsPathWin": "C:\\Espressif",
+  "idf.pythonInstallPath": "C:\\Espressif\\tools\\idf-python\\3.11.2\\python.exe",
+  "files.associations": {
+    "sdkconfig.h": "c",
+    "esp_log.h": "c",
+    "ble_svc_gap.h": "c",
+    "gatts_sens.h": "c",
+    "esp_system.h": "c",
+    "stdbool.h": "c",
+    "uart_ble_tasks.h": "c",
+    "array": "c",
+    "string": "c",
+    "string_view": "c",
+    "span": "c",
+    "format": "c",
+    "common.h": "c",
+    "esp_bt.h": "c",
+    "ble_ota.h": "c"
+  },
+  "idf.openOcdConfigs": [
+    "board/esp32c2-bridge.cfg"
+  ],
+  "idf.customExtraVars": {
+    "IDF_TARGET": "esp32c2"
+  },
+  "clangd.path": "C:\\Espressif\\tools\\esp-clang\\esp-18.1.2_20240912\\esp-clang\\bin\\clangd.exe",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=**",
+    "--compile-commands-dir=c:\\1_jeff\\esp_proj\\ble_transparent\\build"
+  ],
+  "idf.portWin": "COM4",
+  "idf.flashType": "UART",
+  "idf.currentSetup": "C:/Espressif/frameworks/esp-idf-v5.4.1/"
+}

@@ -1,0 +1,72 @@
+dependencies:
+  espressif/ble_ota:
+    component_hash: 61b579a18f0316c200a2757f504662644a1bbb3eeceb24d50cdb9cc396ffe5d4
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: espressif/esp_encrypted_img
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^2.0.1
+    - name: idf
+      require: private
+      version: '>=4.4'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32
+    - esp32c3
+    - esp32h2
+    - esp32s3
+    - esp32c2
+    - esp32c6
+    version: 0.1.15
+  espressif/cmake_utilities:
+    component_hash: 351350613ceafba240b761b4ea991e0f231ac7a9f59a9ee901f751bddc0bb18f
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.1'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.5.3
+  espressif/esp_encrypted_img:
+    component_hash: 210a0ef7642f21d777f65b83b02d03d6bb351f3d107a2d8387e56e4c4da9be76
+    dependencies:
+    - name: espressif/esp_secure_cert_mgr
+      registry_url: https://components.espressif.com
+      require: private
+      rules:
+      - if: idf_version >= 5.3
+      version: '>=2.5.1'
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 2.6.0
+  espressif/esp_secure_cert_mgr:
+    component_hash: 47589860736b456608035b06d88e6a5dab566419fa8737a76a4f33c611ec539b
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 2.7.0
+  idf:
+    source:
+      type: idf
+    version: 5.4.1
+direct_dependencies:
+- espressif/ble_ota
+- idf
+manifest_hash: 30f0c8cd16b787faf0c8dafa29f594e860bec367ae3a9da03c6e606ef1f64a01
+target: esp32c2
+version: 2.0.0
