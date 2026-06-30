@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 // #include "common.h"
+//test
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "freertos/FreeRTOSConfig.h"
