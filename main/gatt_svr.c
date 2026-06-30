@@ -3,7 +3,6 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -16,18 +15,6 @@
 #include "uart_ble_tasks.h"
 #include "gatt_svc.h"
 
-// #include "freertos/FreeRTOS.h"
-// #include "freertos/task.h"
-
-// #include "nimble/nimble_port.h"
-// #include "nimble/nimble_port_freertos.h"
-// #include "freertos/FreeRTOSConfig.h"
-// // #include "host/ble_hs.h"
-// #include "host/util/util.h"
-// #include "console/console.h"
-// // #include "services/gap/ble_svc_gap.h"
-// // #include "gatts_sens.h"
-// #include "../src/ble_hs_hci_priv.h"
 
 /* jeffery add */
 /* Device Information Service*/
