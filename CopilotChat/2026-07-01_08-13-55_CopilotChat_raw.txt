@@ -1,0 +1,7 @@
+﻿2026-07-01_08-13-55 UTC
+Project: ble_transparent
+Source: Copilot session log
+Session file: C:\Users\jeffery.he\AppData\Roaming\Code\User\workspaceStorage\707c632e7b44666c11c0ffb8b850804d\GitHub.copilot-chat\debug-logs\98622272-e477-483f-9d1c-be66a3ad3f8b\main.jsonl
+
+Available session metadata:
+{"v":1,"ts":1782893635251,"dur":0,"sid":"98622272-e477-483f-9d1c-be66a3ad3f8b","type":"session_start","name":"session_start","spanId":"session-start-98622272-e477-483f-9d1c-be66a3ad3f8b","status":"ok","attrs":{"copilotVersion":"0.54.0","vscodeVersion":"1.126.0"}}
