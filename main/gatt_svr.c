@@ -662,15 +662,7 @@ esp_ble_ota_fill_handle_table(void)
 #define WRITE_THROUGHPUT_PAYLOAD           500
 
 static const char *tag = "bleprph_throughput";
-
-static uint8_t gatt_svr_thrpt_static_long_val[READ_THROUGHPUT_PAYLOAD];
-static uint8_t gatt_svr_thrpt_static_short_val[WRITE_THROUGHPUT_PAYLOAD];
-uint16_t notify_handle;
-
-static int
-gatt_svr_read_write_long_test(uint16_t conn_handle, uint16_t attr_handle,
-                              struct ble_gatt_access_ctxt *ctxt,
-                              void *arg);
+// uint16_t notify_handle;
 
 
 static const struct ble_gatt_svc_def gatts_test_svcs[] = {
@@ -774,34 +766,6 @@ static const struct ble_gatt_svc_def gatts_test_svcs[] = {
         },
     },
 
-    /* Throughput Test Service */
-    {
-        /*** Service: THRPT test. */
-        .type = BLE_GATT_SVC_TYPE_PRIMARY,
-        .uuid = THRPT_UUID_DECLARE(THRPT_SVC),
-        .characteristics = (struct ble_gatt_chr_def[])
-        { {
-                .uuid = THRPT_UUID_DECLARE(THRPT_CHR_READ_WRITE),
-                .access_cb = gatt_svr_read_write_long_test,
-                .flags = BLE_GATT_CHR_F_READ |
-                BLE_GATT_CHR_F_WRITE,
-
-            }, {
-                .uuid = THRPT_UUID_DECLARE(THRPT_CHR_NOTIFY),
-                .access_cb = gatt_svr_read_write_long_test,
-                .val_handle = &notify_handle,
-                .flags = BLE_GATT_CHR_F_NOTIFY,
-            }, {
-                .uuid = THRPT_UUID_DECLARE(THRPT_LONG_CHR_READ_WRITE),
-                .access_cb = gatt_svr_read_write_long_test,
-                .flags = BLE_GATT_CHR_F_WRITE |
-                BLE_GATT_CHR_F_READ,
-            }, {
-                0, /* No more characteristics in this service. */
-            }
-        },
-    },
-
     {
         0, /* No more services. */
     },
@@ -838,59 +802,6 @@ gatt_svr_chr_write(uint16_t conn_handle, uint16_t attr_handle,
     }
 
     return 0;
-}
-
-static int
-gatt_svr_read_write_long_test(uint16_t conn_handle, uint16_t attr_handle,
-                              struct ble_gatt_access_ctxt *ctxt,
-                              void *arg)
-{
-    uint16_t uuid16;
-    int rc;
-
-    uuid16 = extract_uuid16_from_thrpt_uuid128(ctxt->chr->uuid);
-    assert(uuid16 != 0);
-
-    switch (uuid16) {
-    case THRPT_LONG_CHR_READ_WRITE:
-        if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
-            rc = gatt_svr_chr_write(conn_handle, attr_handle,
-                                    ctxt->om, 0,
-                                    sizeof gatt_svr_thrpt_static_long_val,
-                                    &gatt_svr_thrpt_static_long_val, NULL);
-            //jeffery 8/27/2025
-            ESP_LOGI("Jeffery",
-             "%02X, %02X, %02X, %02X, %02X, %02X",
-             gatt_svr_thrpt_static_long_val[0], gatt_svr_thrpt_static_long_val[1], gatt_svr_thrpt_static_long_val[2],
-             gatt_svr_thrpt_static_long_val[3], gatt_svr_thrpt_static_long_val[4], gatt_svr_thrpt_static_long_val[5]);
-             //jeffery 8/27/2025 End
-            return rc;
-        } else if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
-            gatt_svr_thrpt_static_long_val[0] = rand();
-            rc = os_mbuf_append(ctxt->om, &gatt_svr_thrpt_static_long_val,
-                                sizeof gatt_svr_thrpt_static_long_val);
-            return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
-        }
-        return 0;
-
-    case THRPT_CHR_READ_WRITE:
-        if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
-            rc = gatt_svr_chr_write(conn_handle, attr_handle,
-                                    ctxt->om, 0,
-                                    sizeof gatt_svr_thrpt_static_short_val,
-                                    gatt_svr_thrpt_static_short_val, NULL);
-            return rc;
-        } else if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
-            rc = os_mbuf_append(ctxt->om, gatt_svr_thrpt_static_short_val,
-                                sizeof gatt_svr_thrpt_static_short_val);
-            return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
-        }
-        return BLE_ATT_ERR_UNLIKELY;
-
-    default:
-        assert(0);
-        return BLE_ATT_ERR_UNLIKELY;
-    }
 }
 
 // jeffery add
@@ -967,15 +878,6 @@ static int transparent_chr_write_notify_indicate(uint16_t conn_handle, uint16_t 
                 "%02X, %02X, %02X, %02X, %02X, %02X",
                 ble_write_item.data[0], ble_write_item.data[1], ble_write_item.data[2],
                 ble_write_item.data[3], ble_write_item.data[4], ble_write_item.data[5]);
-                // rc = gatt_svr_chr_write(conn_handle, attr_handle,
-                //                         ctxt->om, 0,
-                //                         sizeof transparent_payload,
-                //                         transparent_payload, NULL);
-                //jeffery 9/09/2025
-                // ESP_LOGI("Jeffery",
-                // "%02X, %02X, %02X, %02X, %02X, %02X",
-                // transparent_payload[0], transparent_payload[1], transparent_payload[2],
-                // transparent_payload[3], transparent_payload[4], transparent_payload[5]);
                 ESP_LOGI("Jeffery", "write_notify_indicate");           
                 xSemaphoreGive(sem_transparent_notify);           
                 xQueueSend(q_ble2uart, (void *)&ble_write_item, 0);

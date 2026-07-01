@@ -149,129 +149,9 @@ gatts_advertise(void)
     }
 }
 
-/* This function sends notifications to the client */
-static void
-notify_task(void *arg)
-{
-    static uint8_t payload[NOTIFY_THROUGHPUT_PAYLOAD] = {0};/* Data payload */
-    int rc, notify_count = 0;
-    int64_t start_time, end_time, notify_time = 0;
-    struct os_mbuf *om;
 
-    payload[0] = dummy; /* storing dummy data */
-    payload[1] = rand();
-    payload[99] = rand();
-
-    while (!notify_state) {
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-
-    while (1) {
-        switch (notify_test_time) {
-
-        case 0:
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-            break;
-        default:
-            start_time = esp_timer_get_time();
-
-            if (!notify_state) {
-                vTaskDelay(1000 / portTICK_PERIOD_MS);
-                break;
-            }
-
-            while (notify_time < (notify_test_time * 1000)) {
-                /* We are anyway using counting semaphore for sending
-                 * notifications. So hopefully not much waiting period will be
-                 * introduced before sending a new notification. Revisit this
-                 * counter if need to do away with semaphore waiting. XXX */
-                xSemaphoreTake(notify_sem, portMAX_DELAY);
-
-                if (dummy == 200) {
-                    dummy = 0;
-                }
-                dummy++;
-
-                /* Check if the MBUFs are available */
-                if (os_msys_num_free() >= MIN_REQUIRED_MBUF) {
-                    do {
-                        om = ble_hs_mbuf_from_flat(payload, sizeof(payload));
-                        if (om == NULL) {
-                            /* Memory not available for mbuf */
-                            ESP_LOGE(tag, "No MBUFs available from pool, retry..");
-                            vTaskDelay(100 / portTICK_PERIOD_MS);
-                        }
-                    } while (om == NULL);
-
-                    rc = ble_gatts_notify_custom(ble_conn_handle, notify_handle, om);
-                    if (rc != 0) {
-                        ESP_LOGE(tag, "Error while sending notification; rc = %d", rc);
-                        notify_count -= 1;
-                        xSemaphoreGive(notify_sem);
-                        /* Most probably error is because we ran out of mbufs (rc = 6),
-                         * increase the mbuf count/size from menuconfig. Though
-                         * inserting delay is not good solution let us keep it
-                         * simple for time being so that the mbufs get freed up
-                         * (?), of course assumption is we ran out of mbufs */
-                        vTaskDelay(10 / portTICK_PERIOD_MS);
-                    }
-                } else {
-                    ESP_LOGE(tag, "Not enough OS_MBUFs available; reduce notify count ");
-                    xSemaphoreGive(notify_sem);
-                    notify_count -= 1;
-                    vTaskDelay(10 / portTICK_PERIOD_MS);
-                }
-
-                end_time = esp_timer_get_time();
-                notify_time = (end_time - start_time) / 1000 ;
-                notify_count += 1;
-            }
-
-            printf("\n*********************************\n");
-            ESP_LOGI(tag, "Notify throughput = %d bps, count = %d",
-                     (notify_count * NOTIFY_THROUGHPUT_PAYLOAD * 8) / notify_test_time, notify_count);
-            printf("\n*********************************\n");
-            ESP_LOGI(tag, " Notification test complete for stipulated time of %d sec", notify_test_time);
-            notify_test_time = 0;
-            notify_count = 0;
-
-            break;
-        }
-        vTaskDelay(3000 / portTICK_PERIOD_MS);
-    }
-}
 //jeffery 9/9/2025
 uint8_t transparent_payload[20] = {0};
-// SemaphoreHandle_t sem_transparent_notify;
-SemaphoreHandle_t sem_notify_uart;
-// bool notify_state_transparent = false;
-
-static void
-transparent_notify_task(void *arg){
-    int rc;
-    struct os_mbuf *om;
-    while (1)
-    {
-        /* code */
-        if(xSemaphoreTake(sem_transparent_notify, portMAX_DELAY) == true){
-            ESP_LOGI("Jeffery", "Take Semaphore");  
-            om = ble_hs_mbuf_from_flat(transparent_payload, sizeof(transparent_payload));
-            rc = ble_gatts_notify_custom(ble_conn_handle, transparent_notify_handle, om);
-            if (rc != 0) {
-                ESP_LOGE("Jeffery_Error", "Error while sending notification; rc = %d", rc);
-                // xSemaphoreGive(sem_transparent_notify);
-                /* Most probably error is because we ran out of mbufs (rc = 6),
-                    * increase the mbuf count/size from menuconfig. Though
-                    * inserting delay is not good solution let us keep it
-                    * simple for time being so that the mbufs get freed up
-                    * (?), of course assumption is we ran out of mbufs */
-                vTaskDelay(1000 / portTICK_PERIOD_MS);
-            }
-        }
-        
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-}
 extern int32_t bleWrTimeEnd;
 //OTA
 extern void esp_ble_ota_fill_handle_table(void);
@@ -368,16 +248,17 @@ gatts_gap_event(struct ble_gap_event *event, void *arg)
         ESP_LOGI(tag, "subscribe event; cur_notify=%d; value handle; "
                  "val_handle = %d",
                  event->subscribe.cur_notify, event->subscribe.attr_handle);
-        if (event->subscribe.attr_handle == notify_handle) {
-            notify_state = event->subscribe.cur_notify;
-            if (arg != NULL) {
-                ESP_LOGI(tag, "notify test time = %d", *(int *)arg);
-                notify_test_time = *((int *)arg);
-            }
-            xSemaphoreGive(notify_sem);
-        } else if (event->subscribe.attr_handle != notify_handle) {
-            // notify_state = event->subscribe.cur_notify;
-        }
+        //  comment out the notify_state update for notify_handle, since we are now using transparent_notify_handle
+        // if (event->subscribe.attr_handle == notify_handle) {
+        //     notify_state = event->subscribe.cur_notify;
+        //     if (arg != NULL) {
+        //         ESP_LOGI(tag, "notify test time = %d", *(int *)arg);
+        //         notify_test_time = *((int *)arg);
+        //     }
+        //     xSemaphoreGive(notify_sem);
+        // } else if (event->subscribe.attr_handle != notify_handle) {
+        //     // notify_state = event->subscribe.cur_notify;
+        // }
         if(event->subscribe.attr_handle == transparent_notify_handle) {
             ESP_LOGI("Jeffery", "cur_notify=%d; "
                  "val_handle = %d", event->subscribe.cur_notify, event->subscribe.attr_handle);
@@ -386,7 +267,6 @@ gatts_gap_event(struct ble_gap_event *event, void *arg)
             } else {
                 notify_state_transparent = false;
             }
-            // notify_state = event->subscribe.cur_notify;
         } else {
             ESP_LOGI("Jeffery", "Notify Handle is not matched");
         }
@@ -740,31 +620,11 @@ void app_main(void)
     ble_hs_cfg.gatts_register_cb = gatt_svr_register_cb;
     ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
-//     ble_hs_cfg.sm_io_cap = 3; /* NoInputNoOutput */
-// #ifdef CONFIG_EXAMPLE_BONDING
-//     ble_hs_cfg.sm_bonding = 1;
-// #endif
-// #ifdef CONFIG_EXAMPLE_MITM
-//     ble_hs_cfg.sm_mitm = 1;
-// #endif
-// #ifdef CONFIG_EXAMPLE_USE_SC
-//     ble_hs_cfg.sm_sc = 1;
-// #else
-//     ble_hs_cfg.sm_sc = 0;
-// #endif
-// #ifdef CONFIG_EXAMPLE_BONDING
-//     ble_hs_cfg.sm_our_key_dist = 1;
-//     ble_hs_cfg.sm_their_key_dist = 1;
-// #endif
-
     /* Store host configuration */
     ble_store_config_init();
 
     /* Initialize Notify Task */
-    xTaskCreate(notify_task, "notify_task", 4096, NULL, 10, NULL);
-    sem_notify_uart = xSemaphoreCreateBinary();
     sem_transparent_notify = xSemaphoreCreateBinary();
-    // xTaskCreate(transparent_notify_task, "transparent_task", 4096, NULL, 10, NULL);
 
     rc = gatt_svr_init();
     assert(rc == 0);

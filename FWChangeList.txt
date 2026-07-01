@@ -1,0 +1,11 @@
+Note: this codes are developed based on IDF v5.4.1
+
+Firmware Change List
+v1.0.0
+This version is origin source code, don't delete comment codes
+
+v1.0.1
+delete some comment codes
+
+v1.0.2
+delete more some unused codes

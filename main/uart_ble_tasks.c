@@ -27,7 +27,6 @@ static const int RX_BUF_SIZE = 256;//1024;
 //create queue
 QueueHandle_t q_uart2ble;
 QueueHandle_t q_ble2uart;
-QueueHandle_t q_uart2uart;
 int32_t bleWrTimeStart = 0;
 int32_t bleWrTimeEnd = 0;
 
@@ -52,7 +51,6 @@ void uart_init(void)
     //create queue
     q_uart2ble = xQueueCreate(QUEUE_LENGTH, sizeof(queue_item_t));
     q_ble2uart = xQueueCreate(QUEUE_LENGTH, sizeof(queue_item_t));
-    q_uart2uart = xQueueCreate(QUEUE_LENGTH, sizeof(queue_item_t));
     assert(q_uart2ble != NULL);
     assert(q_ble2uart != NULL); 
 }

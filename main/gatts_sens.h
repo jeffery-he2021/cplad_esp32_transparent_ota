@@ -14,8 +14,6 @@
 extern "C" {
 #endif
 
-extern uint16_t notify_handle;
-
 struct ble_hs_cfg;
 struct ble_gatt_register_ctxt;
 
